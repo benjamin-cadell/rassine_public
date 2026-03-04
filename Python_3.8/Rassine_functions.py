@@ -32,8 +32,11 @@ from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 from scipy.stats import norm
 
-np.warnings.filterwarnings('ignore', category=RuntimeWarning)
-
+import warnings
+try:
+    np.warnings.filterwarnings('ignore', category=RuntimeWarning)
+except:
+    warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 py_ver = platform.python_version_tuple()
 py_ver = str(int(py_ver[0])+int(py_ver[1])//10)+'.'+py_ver[1]

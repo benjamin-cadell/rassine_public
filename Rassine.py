@@ -40,7 +40,11 @@ from scipy.special import erf
 
 import Rassine_functions as ras
 
-np.warnings.filterwarnings('ignore', category=RuntimeWarning)
+import warnings
+try:
+    np.warnings.filterwarnings('ignore', category=RuntimeWarning)
+except:
+    warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 #get_ipython().run_line_magic('matplotlib','qt5')
 
