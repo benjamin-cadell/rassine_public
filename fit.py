@@ -1,48 +1,29 @@
 import numpy as np
-
+from numpy.lib.stride_tricks import sliding_window_view
 
 def simple_local_maxima(x, y, vicinity=3, include_edges=False):
-    """
-    Minimal local-max finder.
-
-    include_edges=False avoids forcing bad edge pixels into the continuum.
-    """
     x = np.asarray(x)
     y = np.asarray(y)
 
-    idx = []
+    w = 2 * vicinity + 1
 
-    for i in range(vicinity, len(y) - vicinity):
-        window = y[i - vicinity:i + vicinity + 1]
-        if y[i] == np.max(window):
-            idx.append(i)
-
-    idx = np.array(idx, dtype=int)
+    if len(y) < w:
+        idx = np.array([], dtype=int)
+    else:
+        windows = sliding_window_view(y, w)
+        idx = (
+            np.flatnonzero(
+                y[vicinity:len(y) - vicinity] == windows.max(axis=1)
+            )
+            + vicinity
+        )
 
     if include_edges:
-        idx = np.unique(np.concatenate([[0], idx, [len(y) - 1]]))
+        idx = np.unique(np.r_[0, idx, len(y) - 1])
 
     return x[idx], y[idx], idx
 
 def rolling_pin_anchors(wave, flux, R):
-    """
-    Rolling-pin algorithm.
-
-    Parameters
-    ----------
-    wave : array
-        Wavelengths of local maxima.
-    flux : array
-        Flux values of local maxima.
-    R : float or array
-        Rolling-pin radius. If array, must have same length as wave.
-
-    Returns
-    -------
-    keep_wave, keep_flux, keep_indices
-        Anchor points selected by the rolling pin.
-    """
-
     wave = np.asarray(wave, dtype=float)
     flux = np.asarray(flux, dtype=float)
 
@@ -55,59 +36,57 @@ def rolling_pin_anchors(wave, flux, R):
     else:
         radius = np.asarray(R, dtype=float)[order]
 
-    waves = wave - wave[:, None]
-    distance = np.sign(waves) * np.sqrt(
-        waves**2 + (flux - flux[:, None])**2
-    )
-    distance[distance < 0] = 0
-
-    numero = np.arange(len(wave), dtype=int)
-
     keep = [0]
     j = 0
+    n = len(wave)
 
-    while len(wave) - j > 3:
+    while n - j > 3:
         par_R = float(radius[j])
 
-        mask = (distance[j, :] > 0) & (distance[j, :] < 2.0 * par_R)
+        while True:
+            stop = np.searchsorted(
+                wave,
+                wave[j] + 2.0 * par_R,
+                side="left"
+            )
 
-        # If no point is reachable, enlarge radius until one is.
-        while np.sum(mask) == 0:
+            cand = np.arange(j + 1, stop)
+
+            if cand.size:
+                dx = wave[cand] - wave[j]
+                dy = flux[cand] - flux[j]
+                c = np.hypot(dx, dy)
+
+                mask = (dx > 0.0) & (c < 2.0 * par_R)
+
+                if np.any(mask):
+                    cand = cand[mask]
+                    dx = dx[mask]
+                    dy = dy[mask]
+                    c = c[mask]
+                    break
+
             par_R *= 1.5
-            mask = (distance[j, :] > 0) & (distance[j, :] < 2.0 * par_R)
 
-        p1 = np.array([wave[j], flux[j]])
-        p2 = np.column_stack([wave[mask], flux[mask]])
+        h = np.sqrt(par_R * par_R - 0.25 * c * c)
 
-        delta = p2 - p1
-        c = np.sqrt(delta[:, 0]**2 + delta[:, 1]**2)
+        cx = wave[j] + 0.5 * dx - h / c * dy
+        cy = flux[j] + 0.5 * dy + h / c * dx
 
-        h = np.sqrt(par_R**2 - 0.25 * c**2)
-
-        cx = p1[0] + 0.5 * delta[:, 0] - h / c * delta[:, 1]
-        cy = p1[1] + 0.5 * delta[:, 1] + h / c * delta[:, 0]
-
-        cond1 = (cy - p1[1]) >= 0
-
-        theta = (
-            cond1 * (-np.arccos((cx - p1[0]) / par_R) + np.pi)
-            + (1 - cond1) * (-np.arcsin((cy - p1[1]) / par_R) + np.pi)
+        theta = np.where(
+            cy >= flux[j],
+            -np.arccos((cx - wave[j]) / par_R) + np.pi,
+            -np.arcsin((cy - flux[j]) / par_R) + np.pi,
         )
 
-        j2 = np.argmin(theta)
-        j = numero[mask][j2]
-
+        j = cand[np.argmin(theta)]
         keep.append(j)
 
-    keep = np.array(keep, dtype=int)
+    keep = np.asarray(keep, dtype=int)
 
     return wave[keep], flux[keep], keep
 
 def rolling_pin_continuum(grid, spectrum, R, vicinity=3, y_scale=None):
-    """
-    Minimal rolling-pin continuum model.
-    """
-
     grid = np.asarray(grid, dtype=float)
     spectrum = np.asarray(spectrum, dtype=float)
 
@@ -139,7 +118,6 @@ def rolling_pin_continuum(grid, spectrum, R, vicinity=3, y_scale=None):
         anchor_flux_scaled
     )
 
-    # Prevent artificial edge ramps.
     continuum_scaled[grid_sorted < anchor_wave[0]] = anchor_flux_scaled[0]
     continuum_scaled[grid_sorted > anchor_wave[-1]] = anchor_flux_scaled[-1]
 
