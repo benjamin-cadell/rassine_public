@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
-def simple_local_maxima(x, y, vicinity=3, include_edges=False):
+def simple_local_maxima(x, y, vicinity=7, include_edges=False):
     x = np.asarray(x)
     y = np.asarray(y)
 
@@ -86,7 +86,7 @@ def rolling_pin_anchors(wave, flux, R):
 
     return wave[keep], flux[keep], keep
 
-def rolling_pin_continuum(grid, spectrum, R, vicinity=3, y_scale=None):
+def model(grid, spectrum, R, vicinity=7, y_scale=None):
     grid = np.asarray(grid, dtype=float)
     spectrum = np.asarray(spectrum, dtype=float)
 
